@@ -133,7 +133,8 @@ defmodule Mailroom.IMAP.Utils do
     rfc822_size: "RFC822.SIZE",
     rfc822_text: "RFC822.TEXT",
     uid: "UID",
-    header: "BODY.PEEK[HEADER]"
+    header: "BODY.PEEK[HEADER]",
+    base_header: "BODY.PEEK[HEADER.FIELDS (SUBJECT DATE FROM TO)]"
   ]
   |> Enum.each(fn {atom, string} ->
     defp item_to_string(unquote(atom)), do: unquote(string)
