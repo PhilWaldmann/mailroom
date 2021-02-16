@@ -566,6 +566,9 @@ defmodule Mailroom.IMAP do
   defp parse_fetch_item(key, value),
     do: {key, value}
 
+  defp to_sequence(string) when is_binary(string),
+    do: string
+
   defp to_sequence(number) when is_integer(number),
     do: Integer.to_string(number)
 
