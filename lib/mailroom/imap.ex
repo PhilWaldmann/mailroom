@@ -143,6 +143,22 @@ defmodule Mailroom.IMAP do
     end
   end
 
+  def uid_fetch(pid, number_or_range, items_list, func \\ nil, opts \\ []) do
+    {:ok, list} =
+      GenServer.call(
+        pid,
+        {:uid_fetch, number_or_range, items_list},
+        Keyword.get(opts, :timeout, 300_000)
+      )
+
+    if func do
+      Enum.each(list, func)
+      pid
+    else
+      {:ok, list}
+    end
+  end
+
   def search(pid, query, items_list \\ nil, func \\ nil) do
     {:ok, list} = GenServer.call(pid, {:search, query}, 60_000)
 
@@ -302,6 +318,14 @@ defmodule Mailroom.IMAP do
   def handle_call({:fetch, sequence, items}, from, state) do
     {:noreply,
      send_command(from, ["FETCH", " ", to_sequence(sequence), " ", items_to_list(items)], %{
+       state
+       | temp: []
+     })}
+  end
+
+  def handle_call({:uid_fetch, sequence, items}, from, state) do
+    {:noreply,
+     send_command(from, ["UID FETCH", " ", to_sequence(sequence), " ", items_to_list(items)], %{
        state
        | temp: []
      })}
@@ -506,6 +530,19 @@ defmodule Mailroom.IMAP do
         {:noreply,
          %{state | temp: [{String.to_integer(number), parse_fetch_response(data)} | state.temp]}}
 
+      [number, "UID FETCH", rest] ->
+        data =
+          case Regex.run(~r/(.+ {(\d+)}\r\n)$/, rest) do
+            [_, initial, bytes] ->
+              fetch_all_data(String.to_integer(bytes), 0, [initial], state)
+
+            _ ->
+              rest
+          end
+
+        {:noreply,
+         %{state | temp: [{String.to_integer(number), parse_fetch_response(data)} | state.temp]}}
+
       _ ->
         Logger.warn("Unknown untagged response: #{msg}")
         {:noreply, state}
@@ -696,6 +733,14 @@ defmodule Mailroom.IMAP do
   defp process_command_response(
          cmd_tag,
          %{command: "FETCH", caller: caller},
+         _msg,
+         %{temp: temp} = state
+       ),
+       do: send_reply(caller, Enum.reverse(temp), remove_command_from_state(state, cmd_tag))
+
+  defp process_command_response(
+         cmd_tag,
+         %{command: "UID FETCH", caller: caller},
          _msg,
          %{temp: temp} = state
        ),
